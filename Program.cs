@@ -188,51 +188,103 @@ public sealed class PaintForm : Form
             g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
             g.DrawImage(input, new Rectangle(0, 0, width, height));
         }
+        input.Dispose();
 
-        var pixels = new Color[width * height];
-        var histogram = new Dictionary<int, int>();
-        for (int y = 0; y < height; y++)
-            for (int x = 0; x < width; x++)
+        // Read pixels in one block instead of calling GetPixel millions of times.
+        var source = new byte[checked(width * height * 3)];
+        var rect = new Rectangle(0, 0, width, height);
+        var srcData = normalized.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
+        try
+        {
+            int stride = Math.Abs(srcData.Stride);
+            var row = new byte[stride];
+            for (int y = 0; y < height; y++)
             {
-                Color c = normalized.GetPixel(x, y);
-                pixels[y * width + x] = c;
-                int key = (c.R << 16) | (c.G << 8) | c.B;
-                histogram[key] = histogram.TryGetValue(key, out int count) ? count + 1 : 1;
+                IntPtr rowPtr = IntPtr.Add(srcData.Scan0, y * srcData.Stride);
+                Marshal.Copy(rowPtr, row, 0, stride);
+                for (int x = 0; x < width; x++)
+                {
+                    int si = x * 3, di = (y * width + x) * 3;
+                    source[di] = row[si + 2];     // R
+                    source[di + 1] = row[si + 1]; // G
+                    source[di + 2] = row[si];     // B
+                }
             }
+        }
+        finally { normalized.UnlockBits(srcData); }
 
-        var points = histogram.Select(kv => new ColorPoint(Color.FromArgb((kv.Key >> 16) & 255, (kv.Key >> 8) & 255, kv.Key & 255), kv.Value)).ToList();
+        var histogram = new Dictionary<int, int>();
+        for (int i = 0; i < source.Length; i += 3)
+        {
+            int key = (source[i] << 16) | (source[i + 1] << 8) | source[i + 2];
+            histogram[key] = histogram.TryGetValue(key, out int count) ? count + 1 : 1;
+        }
+        var points = histogram.Select(kv => new ColorPoint(
+            Color.FromArgb((kv.Key >> 16) & 255, (kv.Key >> 8) & 255, kv.Key & 255), kv.Value)).ToList();
         var palette = BuildPalette(points, maxColors);
-        var output = new Bitmap(width, height, PixelFormat.Format24bppRgb);
-        var work = pixels.Select(c => new double[] { c.R, c.G, c.B }).ToArray();
         var paletteRgb = palette.Select(c => new double[] { c.R, c.G, c.B }).ToArray();
+        var outputBytes = new byte[source.Length];
+
+        // Floyd–Steinberg only needs the current and next error rows.
+        var er = new double[width + 2];
+        var eg = new double[width + 2];
+        var eb = new double[width + 2];
+        var nr = new double[width + 2];
+        var ng = new double[width + 2];
+        var nb = new double[width + 2];
 
         for (int y = 0; y < height; y++)
         {
-            bool reverse = useDither && (y % 2 == 1);
-            for (int step = 0; step < width; step++)
+            for (int x = 0; x < width; x++)
             {
-                int x = reverse ? width - 1 - step : step;
-                int i = y * width + x;
-                var p = work[i];
+                int i = (y * width + x) * 3;
+                double r = Math.Clamp(source[i] + er[x + 1], 0, 255);
+                double g = Math.Clamp(source[i + 1] + eg[x + 1], 0, 255);
+                double b = Math.Clamp(source[i + 2] + eb[x + 1], 0, 255);
                 int best = 0;
                 double bestDist = double.MaxValue;
                 for (int k = 0; k < paletteRgb.Length; k++)
                 {
-                    double dr = p[0] - paletteRgb[k][0], dg = p[1] - paletteRgb[k][1], db = p[2] - paletteRgb[k][2];
+                    double dr = r - paletteRgb[k][0], dg = g - paletteRgb[k][1], db = b - paletteRgb[k][2];
                     double distance = dr * dr * 0.30 + dg * dg * 0.59 + db * db * 0.11;
                     if (distance < bestDist) { bestDist = distance; best = k; }
                 }
                 Color q = palette[best];
-                output.SetPixel(x, y, q);
+                outputBytes[i] = q.R; outputBytes[i + 1] = q.G; outputBytes[i + 2] = q.B;
                 if (!useDither) continue;
-                double er = p[0] - q.R, eg = p[1] - q.G, eb = p[2] - q.B;
-                AddError(work, width, height, x + (reverse ? -1 : 1), y, er, eg, eb, 7.0 / 16);
-                AddError(work, width, height, x + (reverse ? 1 : -1), y + 1, er, eg, eb, 3.0 / 16);
-                AddError(work, width, height, x, y + 1, er, eg, eb, 5.0 / 16);
-                AddError(work, width, height, x + (reverse ? -1 : 1), y + 1, er, eg, eb, 1.0 / 16);
+                double drError = r - q.R, dgError = g - q.G, dbError = b - q.B;
+                er[x + 2] += drError * 7.0 / 16; eg[x + 2] += dgError * 7.0 / 16; eb[x + 2] += dbError * 7.0 / 16;
+                nr[x] += drError * 3.0 / 16; ng[x] += dgError * 3.0 / 16; nb[x] += dbError * 3.0 / 16;
+                nr[x + 1] += drError * 5.0 / 16; ng[x + 1] += dgError * 5.0 / 16; nb[x + 1] += dbError * 5.0 / 16;
+                nr[x + 2] += drError / 16; ng[x + 2] += dgError / 16; nb[x + 2] += dbError / 16;
+            }
+            if (useDither)
+            {
+                (er, nr) = (nr, er); (eg, ng) = (ng, eg); (eb, nb) = (nb, eb);
+                Array.Clear(nr); Array.Clear(ng); Array.Clear(nb);
             }
         }
-        input.Dispose();
+
+        var output = new Bitmap(width, height, PixelFormat.Format24bppRgb);
+        var dstData = output.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
+        try
+        {
+            int stride = Math.Abs(dstData.Stride);
+            var row = new byte[stride];
+            for (int y = 0; y < height; y++)
+            {
+                Array.Clear(row);
+                for (int x = 0; x < width; x++)
+                {
+                    int si = (y * width + x) * 3, di = x * 3;
+                    row[di] = outputBytes[si + 2];
+                    row[di + 1] = outputBytes[si + 1];
+                    row[di + 2] = outputBytes[si];
+                }
+                Marshal.Copy(row, 0, IntPtr.Add(dstData.Scan0, y * dstData.Stride), stride);
+            }
+        }
+        finally { output.UnlockBits(dstData); }
         return output;
     }
 
@@ -274,9 +326,9 @@ public sealed class PaintForm : Form
         {
             long count = b.Sum(p => (long)p.Count);
             return Color.FromArgb(
-                (int)b.Sum(p => (long)p.Color.R * p.Count) / (int)count,
-                (int)b.Sum(p => (long)p.Color.G * p.Count) / (int)count,
-                (int)b.Sum(p => (long)p.Color.B * p.Count) / (int)count);
+                (int)(b.Sum(p => (long)p.Color.R * p.Count) / count),
+                (int)(b.Sum(p => (long)p.Color.G * p.Count) / count),
+                (int)(b.Sum(p => (long)p.Color.B * p.Count) / count));
         }).Distinct().ToList();
     }
 
