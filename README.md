@@ -1,44 +1,28 @@
-# PaintExtreme — 256 Colour Studio
+# Paint AutoDrawer 256
 
-A standalone Windows image editor built with .NET 8 WinForms. It opens images, reduces them to an image-derived palette of up to 256 colours, previews the result on its own canvas, and exports a PNG.
+A Windows .NET 8 WinForms utility that converts an image to at most 256 colours and draws it into Microsoft Paint using mouse and keyboard input.
 
-It does **not** control Microsoft Paint, simulate mouse strokes, or use RGB dialogs.
-
-## Features
-
-- Open PNG, JPG, BMP, GIF and TIFF images.
-- Convert images to a palette of 2–256 colours using median-cut quantization.
-- Optional Floyd–Steinberg dithering.
-- Preview the converted image directly in the app.
-- Export the result as a PNG.
-- Automatically saves palette size, dithering preference, window size and last folder to `%AppData%\PaintAutoDrawer256\config.json`.
-- Processes pixels in memory-efficient scanline buffers rather than issuing thousands of UI actions.
-
-## Build on Windows
-
-1. Install the .NET 8 SDK.
+## Build
+1. Install the .NET 8 SDK on Windows.
 2. Open PowerShell in this repository.
 3. Run:
-
    ```powershell
    Set-ExecutionPolicy -Scope Process Bypass -Force
    .\build.ps1
    ```
-
-4. The self-contained executable is written to `bin\Release\net8.0-windows\win-x64\publish\PaintAutoDrawer256.exe`.
+4. The single-file executable is written to `bin\Release\net8.0-windows\win-x64\publish\PaintAutoDrawer256.exe`.
 
 ## Use
+1. Open Paint and select the Pencil tool with size 1.
+2. Load an image in AutoDrawer.
+3. Calibrate the RGB dialog button, Red, Green, Blue and OK positions. For each calibration item, click Capture, move the pointer over the target in Paint, then press F8.
+4. Calibrate the top-left and bottom-right corners of the Paint drawing area the same way.
+5. Press F6 to start. Space pauses/resumes; Escape cancels.
 
-1. Click **Open image**.
-2. Choose a palette size up to 256.
-3. Enable or disable Floyd–Steinberg dithering.
-4. Click **Convert to palette** to preview the result.
-5. Click **Export PNG** to save it.
-
-Settings are saved automatically when changed and when the app closes.
+The app uses an image-derived median-cut palette (maximum 256 colours), Floyd–Steinberg error diffusion, and horizontal runs. Settings are saved in `%AppData%\PaintAutoDrawer256\config.json`.
 
 ## Notes
-
-- The app edits image pixels directly; there are no screen-coordinate calibrations.
-- Very large source images require more memory and processing time.
-- The exported PNG contains the converted image at its original pixel dimensions.
+- Keep Paint at 100% zoom and do not move/resize its window after canvas calibration.
+- Use a blank canvas whose visible drawing area matches the selected calibration rectangle.
+- Windows/Paint input handling limits speed. A photo can take a long time because each distinct palette colour requires an RGB-dialog change.
+- The app automates Paint; it does not promise pixel-perfect results on every Paint version or display configuration.
