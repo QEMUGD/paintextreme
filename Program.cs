@@ -40,6 +40,7 @@ public sealed class MainForm : Form
     }
     const uint INPUT_MOUSE = 0, INPUT_KEYBOARD = 1, LEFTDOWN = 0x0002, LEFTUP = 0x0004;
     const uint KEYUP = 0x0002;
+    const uint KEYEVENTF_KEYUP = 0x0002;
     const int HK_START = 1, HK_CAPTURE = 2, HK_PAUSE = 3, HK_CANCEL = 4;
 
     sealed class Config
@@ -364,19 +365,67 @@ public sealed class MainForm : Form
 
     void SetPaintColor(Color c)
     {
+        // Wait for Paint to finish opening the RGB editor.
         Click(cfg.RgbButton);
-        SetField(cfg.RedField, c.R.ToString());
-        SetField(cfg.GreenField, c.G.ToString());
-        SetField(cfg.BlueField, c.B.ToString());
+        Thread.Sleep(180);
+
+        SetField(cfg.RedField, c.R);
+        SetField(cfg.GreenField, c.G);
+        SetField(cfg.BlueField, c.B);
+
+        Thread.Sleep(60);
         Click(cfg.OkButton);
+        Thread.Sleep(100);
     }
-    void SetField(Point p, string value)
+
+    void SetField(Point p, int value)
     {
+        // Focus the field, select all digits, and type using Windows SendInput.
         Click(p);
-        SendKeys.SendWait("^a");
-        SendKeys.SendWait(value);
+        Thread.Sleep(35);
+        KeyDown(0x11); // Ctrl
+        KeyTap(0x41);  // A
+        KeyUp(0x11);
+        Thread.Sleep(20);
+
+        string digits = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        foreach (char digit in digits)
+        {
+            KeyTap((ushort)(0x30 + (digit - '0')));
+            Thread.Sleep(8);
+        }
+        Thread.Sleep(35);
     }
-    static void Click(Point p) { SetCursorPos(p.X, p.Y); MouseDown(); MouseUp(); }
+
+    static void Click(Point p)
+    {
+        SetCursorPos(p.X, p.Y);
+        Thread.Sleep(25);
+        MouseDown();
+        Thread.Sleep(18);
+        MouseUp();
+        Thread.Sleep(25);
+    }
+
+    static void KeyDown(ushort vk) => SendKey(vk, 0);
+    static void KeyUp(ushort vk) => SendKey(vk, KEYEVENTF_KEYUP);
+    static void KeyTap(ushort vk)
+    {
+        SendKey(vk, 0);
+        SendKey(vk, KEYEVENTF_KEYUP);
+    }
+    static void SendKey(ushort vk, uint flags)
+    {
+        var input = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            data = new MOUSEKEYBDATA
+            {
+                ki = new KEYBDINPUT { wVk = vk, dwFlags = flags }
+            }
+        };
+        SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+    }
     static void MouseDown() => SendMouse(LEFTDOWN);
     static void MouseUp() => SendMouse(LEFTUP);
     static void SendMouse(uint flags)
