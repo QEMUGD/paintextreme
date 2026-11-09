@@ -405,7 +405,7 @@ public sealed class PaintForm : Form
 
     protected override void WndProc(ref Message m)
     {
-        if (m.Msg == 0x0312 && m.WParam.ToInt32() == 0xF008 && captureTarget != null)
+        if (m.Msg == 0x0312 && m.WParam.ToInt32() == 88 && captureTarget != null)
         {
             if (GetCursorPos(out var p))
             {
