@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Text.Json;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace PaintAutoDrawer256;
