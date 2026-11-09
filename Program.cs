@@ -64,7 +64,7 @@ public sealed class MainForm : Form
     Label status = new() { AutoSize = true, Text = "Load an image to begin." };
     PictureBox preview = new() { Width = 300, Height = 220, SizeMode = PictureBoxSizeMode.Zoom, BorderStyle = BorderStyle.FixedSingle };
     NumericUpDown colors = new() { Minimum = 2, Maximum = 256, Value = 256, Width = 80 };
-    NumericUpDown delay = new() { Minimum = 0, Maximum = 100, Value = 0, Width = 80 };
+    NumericUpDown delay = new() { Minimum = 0, Maximum = 100, Value = 4, Width = 80 };
     Button start = new() { Text = "Start drawing (F6)", AutoSize = true };
     readonly Dictionary<string, Button> captureButtons = new();
 
@@ -103,7 +103,7 @@ public sealed class MainForm : Form
         left.Controls.Add(load); left.Controls.Add(preview);
         left.Controls.Add(new Label { Text = "Maximum palette colours:", AutoSize = true });
         left.Controls.Add(colors);
-        left.Controls.Add(new Label { Text = "Delay between actions (ms):", AutoSize = true });
+        left.Controls.Add(new Label { Text = "Pause between strokes (ms):", AutoSize = true });
         left.Controls.Add(delay);
         start.Click += async (_, _) => await StartDrawing();
         left.Controls.Add(start);
