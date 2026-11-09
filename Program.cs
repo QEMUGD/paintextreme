@@ -75,12 +75,17 @@ public sealed class MainForm : Form
         configPath = Path.Combine(configDir, "config.json");
         LoadConfig();
         BuildUi();
+        KeyPreview = true;
         Shown += (_, _) =>
         {
-            RegisterHotKey(Handle, HK_START, 0, (uint)Keys.F6);
-            RegisterHotKey(Handle, HK_CAPTURE, 0, (uint)Keys.F8);
+            bool startHotkey = RegisterHotKey(Handle, HK_START, 0, (uint)Keys.F6);
+            bool captureHotkey = RegisterHotKey(Handle, HK_CAPTURE, 0, (uint)Keys.F8);
             RegisterHotKey(Handle, HK_PAUSE, 0, (uint)Keys.Space);
             RegisterHotKey(Handle, HK_CANCEL, 0, (uint)Keys.Escape);
+            if (!captureHotkey)
+                SetStatus("F8 is already in use by another app. Focus AutoDrawer and press F8, or use the Capture button again.");
+            else if (!startHotkey)
+                SetStatus("F6 is unavailable; use Start drawing.");
         };
         FormClosed += (_, _) =>
         {
@@ -161,6 +166,16 @@ public sealed class MainForm : Form
             SetStatus($"Loaded {source.Width} × {source.Height}. Calibrate the Paint canvas before drawing.");
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "Image error"); }
+    }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if ((keyData & Keys.KeyCode) == Keys.F8 && captureTarget != null)
+        {
+            CapturePoint();
+            return true;
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     protected override void WndProc(ref Message m)
