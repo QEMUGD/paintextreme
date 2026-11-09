@@ -223,7 +223,9 @@ public sealed class MainForm : Form
             SetStatus($"Preparing {w} × {h} image and up to {(int)colors.Value} colours…");
             rendered?.Dispose();
             rendered = Quantize(source, w, h, (int)colors.Value);
-            await Task.Run(() => DrawBitmap(rendered));
+            int actionDelay = (int)delay.Value;
+            var bitmapToDraw = rendered;
+            await Task.Run(() => DrawBitmap(bitmapToDraw, actionDelay));
             SetStatus(cancel ? "Cancelled." : "Finished.");
         }
         catch (Exception ex) { SetStatus("Error: " + ex.Message); MessageBox.Show(this, ex.ToString(), "AutoDrawer error"); }
@@ -310,7 +312,7 @@ public sealed class MainForm : Form
             (int)b.Average(c => c.R), (int)b.Average(c => c.G), (int)b.Average(c => c.B))).Distinct().ToList();
     }
 
-    void DrawBitmap(Bitmap bmp)
+    void DrawBitmap(Bitmap bmp, int actionDelay)
     {
         int w = bmp.Width, h = bmp.Height;
         var rows = new Color[w * h];
@@ -350,7 +352,7 @@ public sealed class MainForm : Form
                 SetCursorPos(sx, sy); MouseDown();
                 if (ex != sx) SetCursorPos(ex, sy);
                 MouseUp();
-                if (delay.Value > 0) Thread.Sleep((int)delay.Value);
+                if (actionDelay > 0) Thread.Sleep(actionDelay);
             }
         }
     }
